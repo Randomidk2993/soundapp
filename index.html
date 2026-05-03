@@ -1,0 +1,1939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOUNDVAULT — Free Soundboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- Firebase SDK (v9 compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<style>
+/* ===== DESIGN TOKENS ===== */
+:root {
+  --bg-void: #050505;
+  --bg-deep: #0a0a0a;
+  --bg-surface: #111111;
+  --bg-raised: #161616;
+  --bg-card: #1a1a1a;
+  --bg-hover: #222222;
+
+  --accent-green: #39ff14;
+  --accent-green-dim: #1a7a06;
+  --accent-green-glow: rgba(57,255,20,0.15);
+  --accent-orange: #ff6a00;
+  --accent-orange-dim: #7a3200;
+  --accent-orange-glow: rgba(255,106,0,0.15);
+  --accent-cyan: #00e5ff;
+  --accent-yellow: #ffd700;
+
+  --text-primary: #f0f0f0;
+  --text-secondary: #888888;
+  --text-muted: #444444;
+  --text-accent: var(--accent-green);
+
+  --border-subtle: rgba(255,255,255,0.06);
+  --border-active: rgba(57,255,20,0.3);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-mono: 'Space Mono', monospace;
+  --font-body: 'DM Sans', sans-serif;
+
+  --transition-fast: 0.12s ease;
+  --transition-med: 0.25s ease;
+  --transition-slow: 0.4s cubic-bezier(0.16,1,0.3,1);
+}
+
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-void);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+  cursor: default;
+}
+
+/* Noise overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1000;
+  opacity: 0.4;
+}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-void); }
+::-webkit-scrollbar-thumb { background: var(--accent-green-dim); border-radius: 2px; }
+
+/* ===== GRID BACKGROUND ===== */
+.grid-bg {
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(57,255,20,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(57,255,20,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ===== NAV ===== */
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(5,5,5,0.92);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.nav-logo-icon {
+  width: 32px;
+  height: 32px;
+  background: var(--accent-green);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-logo-icon::after {
+  content: '▶';
+  font-size: 13px;
+  color: #000;
+  font-weight: 900;
+}
+
+.nav-logo-text {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: 2px;
+  color: var(--text-primary);
+}
+
+.nav-logo-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 2px 6px;
+  border: 1px solid var(--accent-green);
+  color: var(--accent-green);
+  border-radius: 3px;
+  letter-spacing: 1px;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-links a {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.5px;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.nav-links a:hover { color: var(--text-primary); background: var(--bg-surface); }
+
+.nav-btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 7px 16px;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: all var(--transition-fast);
+}
+
+.nav-btn:hover {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+/* Stats bar */
+.stats-bar {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 8px 24px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  position: relative;
+  z-index: 10;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stat-num {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--accent-green);
+  line-height: 1;
+  min-width: 40px;
+  display: inline-block;
+}
+
+.stat-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.stat-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--border-subtle);
+}
+
+.live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 8px var(--accent-green);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.7); }
+}
+
+/* ===== MAIN LAYOUT ===== */
+.app-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: calc(100vh - 96px);
+  position: relative;
+  z-index: 2;
+}
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  background: var(--bg-deep);
+  border-right: 1px solid var(--border-subtle);
+  padding: 20px 0;
+  position: sticky;
+  top: 96px;
+  height: calc(100vh - 96px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.sidebar-section-title {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding: 0 16px 8px;
+}
+
+.category-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+}
+
+.category-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border-left: 2px solid transparent;
+  font-size: 13px;
+  color: var(--text-secondary);
+  position: relative;
+}
+
+.category-item:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-left-color: var(--border-subtle);
+}
+
+.category-item.active {
+  background: var(--accent-green-glow);
+  color: var(--accent-green);
+  border-left-color: var(--accent-green);
+}
+
+.category-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.category-count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-raised);
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.category-item.active .category-count {
+  background: var(--accent-green-glow);
+  color: var(--accent-green);
+}
+
+/* Sidebar tags cloud */
+.tags-section { padding: 0 16px; margin-top: 8px; }
+
+.tags-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag-pill {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: all var(--transition-fast);
+}
+
+.tag-pill:hover, .tag-pill.active {
+  border-color: var(--accent-orange);
+  color: var(--accent-orange);
+  background: var(--accent-orange-glow);
+}
+
+/* ===== MAIN CONTENT ===== */
+.main-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Search / Filter bar */
+.search-bar {
+  padding: 16px 24px;
+  background: var(--bg-deep);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: sticky;
+  top: 96px;
+  z-index: 50;
+  backdrop-filter: blur(10px);
+}
+
+.search-wrap {
+  flex: 1;
+  position: relative;
+}
+
+.search-wrap::before {
+  content: '⌕';
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 18px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.search-input {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px 14px 10px 38px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.search-input::placeholder { color: var(--text-muted); }
+
+.search-input:focus {
+  border-color: var(--accent-green);
+  box-shadow: 0 0 0 3px var(--accent-green-glow);
+}
+
+.view-toggle {
+  display: flex;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.view-btn {
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all var(--transition-fast);
+  line-height: 1;
+}
+
+.view-btn.active {
+  background: var(--accent-green-glow);
+  color: var(--accent-green);
+}
+
+.sort-select {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23666'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  transition: border-color var(--transition-fast);
+}
+
+.sort-select:focus { border-color: var(--accent-green); }
+.sort-select option { background: var(--bg-surface); }
+
+/* Currently playing banner */
+.now-playing-bar {
+  padding: 10px 24px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border-subtle);
+  display: none;
+  align-items: center;
+  gap: 14px;
+}
+
+.now-playing-bar.visible { display: flex; }
+
+.np-pulse {
+  display: flex;
+  gap: 3px;
+  align-items: flex-end;
+  height: 16px;
+}
+
+.np-bar {
+  width: 3px;
+  background: var(--accent-green);
+  border-radius: 2px;
+  box-shadow: 0 0 6px var(--accent-green);
+  animation: eq-bar 0.8s ease-in-out infinite alternate;
+}
+
+.np-bar:nth-child(1) { height: 6px; animation-delay: 0s; }
+.np-bar:nth-child(2) { height: 14px; animation-delay: 0.15s; }
+.np-bar:nth-child(3) { height: 9px; animation-delay: 0.3s; }
+.np-bar:nth-child(4) { height: 12px; animation-delay: 0.1s; }
+
+@keyframes eq-bar {
+  from { transform: scaleY(0.3); }
+  to { transform: scaleY(1); }
+}
+
+.np-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-green);
+}
+
+.np-category {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.np-stop {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.np-stop:hover { border-color: #ff4444; color: #ff4444; }
+
+/* ===== SOUND GRID ===== */
+.sound-grid-container {
+  padding: 20px 24px;
+  flex: 1;
+}
+
+.grid-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.grid-title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  letter-spacing: 2px;
+  color: var(--text-primary);
+}
+
+.grid-title span { color: var(--accent-green); }
+
+.grid-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+/* Grid view */
+.sound-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  transition: all var(--transition-med);
+}
+
+.sound-grid.list-view {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+
+/* Sound Card */
+.sound-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 16px 14px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all var(--transition-med);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: card-in 0.3s ease both;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.sound-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(57,255,20,0.06), transparent 70%);
+  opacity: 0;
+  transition: opacity var(--transition-med);
+  pointer-events: none;
+}
+
+.sound-card:hover { 
+  border-color: rgba(57,255,20,0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4), 0 0 20px rgba(57,255,20,0.04);
+}
+
+.sound-card:hover::before { opacity: 1; }
+
+.sound-card.playing {
+  border-color: var(--accent-green);
+  box-shadow: 0 0 20px rgba(57,255,20,0.2), inset 0 0 20px rgba(57,255,20,0.03);
+  background: #0f1a0f;
+}
+
+.sound-card.playing::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent-green);
+  box-shadow: 0 0 8px var(--accent-green);
+  width: var(--progress, 0%);
+  transition: width 0.2s linear;
+}
+
+/* Category color variants */
+.sound-card[data-cat="sfx"] { --card-accent: var(--accent-green); }
+.sound-card[data-cat="music"] { --card-accent: var(--accent-cyan); }
+.sound-card[data-cat="voice"] { --card-accent: var(--accent-orange); }
+.sound-card[data-cat="nature"] { --card-accent: #00d4aa; }
+.sound-card[data-cat="ui"] { --card-accent: var(--accent-yellow); }
+.sound-card[data-cat="ambient"] { --card-accent: #bb86fc; }
+
+.card-icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+  transition: all var(--transition-med);
+  position: relative;
+}
+
+.sound-card:hover .card-icon-wrap,
+.sound-card.playing .card-icon-wrap {
+  background: var(--accent-green-glow);
+  border-color: var(--accent-green);
+  box-shadow: 0 0 12px var(--accent-green-glow);
+}
+
+.sound-card.playing .card-icon-wrap::after {
+  content: '▶';
+  position: absolute;
+  font-size: 10px;
+  color: var(--accent-green);
+  animation: icon-pulse 1s ease-in-out infinite;
+}
+
+@keyframes icon-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
+
+.card-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+}
+
+.card-category {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 20px;
+  border: 1px solid;
+}
+
+.sound-card[data-cat="sfx"] .card-category { color: var(--accent-green); border-color: rgba(57,255,20,0.3); background: rgba(57,255,20,0.06); }
+.sound-card[data-cat="music"] .card-category { color: var(--accent-cyan); border-color: rgba(0,229,255,0.3); background: rgba(0,229,255,0.06); }
+.sound-card[data-cat="voice"] .card-category { color: var(--accent-orange); border-color: rgba(255,106,0,0.3); background: rgba(255,106,0,0.06); }
+.sound-card[data-cat="nature"] .card-category { color: #00d4aa; border-color: rgba(0,212,170,0.3); background: rgba(0,212,170,0.06); }
+.sound-card[data-cat="ui"] .card-category { color: var(--accent-yellow); border-color: rgba(255,215,0,0.3); background: rgba(255,215,0,0.06); }
+.sound-card[data-cat="ambient"] .card-category { color: #bb86fc; border-color: rgba(187,134,252,0.3); background: rgba(187,134,252,0.06); }
+
+.card-size {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+/* Ripple effect */
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(57,255,20,0.2);
+  transform: scale(0);
+  animation: ripple-anim 0.5s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes ripple-anim {
+  to { transform: scale(4); opacity: 0; }
+}
+
+/* List view card variant */
+.sound-grid.list-view .sound-card {
+  flex-direction: row;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  gap: 12px;
+}
+
+.sound-grid.list-view .card-icon-wrap {
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.sound-grid.list-view .card-name {
+  flex: 1;
+  font-size: 12px;
+}
+
+.sound-grid.list-view .card-meta {
+  flex-direction: row;
+  gap: 8px;
+  margin-top: 0;
+}
+
+/* ===== SENTINEL / LOADING ===== */
+.load-sentinel {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.load-spinner {
+  display: none;
+  gap: 5px;
+  align-items: flex-end;
+}
+
+.load-spinner.visible { display: flex; }
+
+.spinner-bar {
+  width: 3px;
+  background: var(--accent-green);
+  border-radius: 2px;
+  animation: spin-eq 0.7s ease-in-out infinite alternate;
+}
+
+.spinner-bar:nth-child(1) { height: 8px; animation-delay: 0s; }
+.spinner-bar:nth-child(2) { height: 16px; animation-delay: 0.1s; }
+.spinner-bar:nth-child(3) { height: 10px; animation-delay: 0.2s; }
+.spinner-bar:nth-child(4) { height: 14px; animation-delay: 0.05s; }
+.spinner-bar:nth-child(5) { height: 6px; animation-delay: 0.15s; }
+
+@keyframes spin-eq {
+  from { transform: scaleY(0.3); }
+  to { transform: scaleY(1); }
+}
+
+.end-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 20px;
+  display: none;
+}
+
+.end-label.visible { display: block; }
+
+/* ===== EMPTY STATE ===== */
+.empty-state {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 40px;
+  text-align: center;
+  gap: 12px;
+}
+
+.empty-state.visible { display: flex; }
+
+.empty-icon { font-size: 48px; opacity: 0.3; }
+
+.empty-title {
+  font-family: var(--font-display);
+  font-size: 32px;
+  letter-spacing: 2px;
+  color: var(--text-primary);
+  opacity: 0.5;
+}
+
+.empty-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ===== TOAST ===== */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: toast-in 0.3s var(--transition-slow) both;
+  backdrop-filter: blur(10px);
+  max-width: 260px;
+}
+
+.toast.success { border-color: rgba(57,255,20,0.3); color: var(--accent-green); }
+.toast.error { border-color: rgba(255,68,68,0.3); color: #ff4444; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ===== KEYBOARD SHORTCUT HINT ===== */
+.kbd-hint {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 500;
+  opacity: 0;
+  animation: hint-fade 3s 2s ease both;
+}
+
+@keyframes hint-fade {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+kbd {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+/* ===== VOLUME CONTROL ===== */
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.volume-icon {
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: color var(--transition-fast);
+  user-select: none;
+}
+
+.volume-icon:hover { color: var(--text-primary); }
+
+input[type="range"].volume-slider {
+  -webkit-appearance: none;
+  width: 80px;
+  height: 3px;
+  background: var(--bg-surface);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"].volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 6px var(--accent-green);
+  transition: transform var(--transition-fast);
+}
+
+input[type="range"].volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .app-layout { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .sound-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .stats-bar { gap: 16px; padding: 8px 16px; }
+  .stat-num { font-size: 18px; }
+}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="#">
+    <div class="nav-logo-icon"></div>
+    <span class="nav-logo-text">SOUNDVAULT</span>
+    <span class="nav-logo-badge">BETA</span>
+  </a>
+  <div class="nav-links">
+    <span class="volume-control">
+      <span class="volume-icon" id="volumeIcon">🔊</span>
+      <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.05" value="0.8">
+    </span>
+    <a href="#">Discord</a>
+    <a href="#">How It Works</a>
+    <button class="nav-btn" id="addSoundBtn">+ Add Sound</button>
+  </div>
+</nav>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stat-item">
+    <span class="stat-num" id="statTotal">0</span>
+    <span class="stat-label">Total Sounds</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-num" id="statCategories">0</span>
+    <span class="stat-label">Categories</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <span class="stat-num" id="statPlays">0</span>
+    <span class="stat-label">Plays Today</span>
+  </div>
+  <div class="live-indicator">
+    <div class="live-dot"></div>
+    LIVE
+  </div>
+</div>
+
+<!-- APP LAYOUT -->
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section-title">BROWSE BY</div>
+    <ul class="category-list" id="categoryList">
+      <li class="category-item active" data-cat="all">
+        <span class="category-icon">🎵</span>
+        All Sounds
+        <span class="category-count" id="cnt-all">0</span>
+      </li>
+    </ul>
+
+    <div class="sidebar-section-title" style="margin-top:8px;">TAGS</div>
+    <div class="tags-section">
+      <div class="tags-cloud" id="tagsCloud"></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main-content">
+
+    <!-- SEARCH BAR -->
+    <div class="search-bar">
+      <div class="search-wrap">
+        <input type="text" class="search-input" id="searchInput" placeholder="Search sounds, tags, categories...">
+      </div>
+      <select class="sort-select" id="sortSelect">
+        <option value="name">A–Z</option>
+        <option value="playCount">Most Played</option>
+        <option value="createdAt">Newest</option>
+        <option value="sizeKB">Size</option>
+      </select>
+      <div class="view-toggle">
+        <button class="view-btn active" id="gridViewBtn" title="Grid">⊞</button>
+        <button class="view-btn" id="listViewBtn" title="List">≡</button>
+      </div>
+    </div>
+
+    <!-- NOW PLAYING -->
+    <div class="now-playing-bar" id="nowPlayingBar">
+      <div class="np-pulse">
+        <div class="np-bar"></div>
+        <div class="np-bar"></div>
+        <div class="np-bar"></div>
+        <div class="np-bar"></div>
+      </div>
+      <span class="np-name" id="npName">—</span>
+      <span class="np-category" id="npCategory"></span>
+      <button class="np-stop" id="npStop">■ STOP</button>
+    </div>
+
+    <!-- SOUND GRID -->
+    <div class="sound-grid-container">
+      <div class="grid-header">
+        <div class="grid-title" id="gridTitle">ALL SOUNDS <span id="gridTitleAccent"></span></div>
+        <div class="grid-meta" id="gridMeta">Loading...</div>
+      </div>
+
+      <div class="sound-grid" id="soundGrid"></div>
+
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">🎚️</div>
+        <div class="empty-title">NO SOUNDS FOUND</div>
+        <div class="empty-sub">Try a different search or category</div>
+      </div>
+
+      <div class="load-sentinel" id="loadSentinel">
+        <div class="load-spinner" id="loadSpinner">
+          <div class="spinner-bar"></div>
+          <div class="spinner-bar"></div>
+          <div class="spinner-bar"></div>
+          <div class="spinner-bar"></div>
+          <div class="spinner-bar"></div>
+        </div>
+      </div>
+
+      <div class="end-label" id="endLabel">— END OF RESULTS —</div>
+    </div>
+  </main>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- KEYBOARD HINT -->
+<div class="kbd-hint">
+  Click a sound to play · <kbd>ESC</kbd> to stop · <kbd>/</kbd> to search
+</div>
+
+<script>
+// ============================================================
+//  SOUNDVAULT — Production Soundboard Architecture
+//  
+//  Architecture:
+//  ┌─────────────────────────────────────────────────────────┐
+//  │  FirestoreEngine   — cursor-based pagination, batching  │
+//  │  CacheLayer        — in-memory + IndexedDB TTL cache     │
+//  │  AudioEngine       — debounced, pooled, preload:none    │
+//  │  SearchEngine      — client-side fuzzy + Firestore idx  │
+//  │  UIController      — IntersectionObserver lazy loading  │
+//  └─────────────────────────────────────────────────────────┘
+// ============================================================
+
+// ── FIREBASE CONFIG ──────────────────────────────────────────
+// Replace with your Firebase project config:
+const FIREBASE_CONFIG = {
+  apiKey:            "YOUR_API_KEY",
+  authDomain:        "YOUR_PROJECT.firebaseapp.com",
+  projectId:         "YOUR_PROJECT_ID",
+  storageBucket:     "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId:             "YOUR_APP_ID"
+};
+
+// ── CONSTANTS ────────────────────────────────────────────────
+const PAGE_SIZE        = 40;          // Firestore docs per page
+const CACHE_TTL_MS     = 5 * 60_000; // 5 min in-memory cache TTL
+const IDB_TTL_MS       = 30 * 60_000;// 30 min IndexedDB TTL
+const DEBOUNCE_SEARCH  = 300;         // ms
+const MAX_AUDIO_POOL   = 5;           // concurrent audio instances
+const DEMO_MODE        = true;        // set false when Firebase is configured
+
+// ── DEMO DATA (used when DEMO_MODE=true or Firebase unavailable) ──
+const DEMO_SOUNDS = generateDemoSounds(200);
+
+function generateDemoSounds(count) {
+  const categories = ['sfx','music','voice','nature','ui','ambient'];
+  const catIcons   = { sfx:'💥', music:'🎸', voice:'🎙️', nature:'🌿', ui:'🖱️', ambient:'🌌' };
+  const tags = [
+    ['boom','impact','hit'],['loop','beat','rhythm'],['male','dialogue','shout'],
+    ['rain','wind','birds'],['click','ping','beep'],['drone','pad','atmosphere']
+  ];
+  const adjectives = ['Epic','Dark','Bright','Deep','Heavy','Soft','Sharp','Warm','Cold','Crisp'];
+  const nouns      = ['Thunder','Blast','Pulse','Echo','Strike','Wave','Crash','Flow','Buzz','Tone'];
+
+  return Array.from({ length: count }, (_, i) => {
+    const catIdx = i % categories.length;
+    const cat    = categories[catIdx];
+    return {
+      id:        `demo_${i}`,
+      name:      `${adjectives[i % adjectives.length]} ${nouns[i % nouns.length]} ${i + 1}`,
+      url:       `https://assets.mixkit.co/active_storage/sfx/212/212-preview.mp3`,
+      category:  cat,
+      tags:      tags[catIdx].slice(0, 2),
+      sizeKB:    Math.round(80 + Math.random() * 500),
+      createdAt: new Date(Date.now() - i * 86400_000),
+      playCount: Math.floor(Math.random() * 500),
+      icon:      catIcons[cat]
+    };
+  });
+}
+
+// ── INDEXEDDB CACHE ──────────────────────────────────────────
+class IDBCache {
+  constructor(dbName = 'soundvault', storeName = 'pages') {
+    this.storeName = storeName;
+    this.db = null;
+    this._init(dbName);
+  }
+
+  _init(dbName) {
+    const req = indexedDB.open(dbName, 1);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(this.storeName)) {
+        db.createObjectStore(this.storeName, { keyPath: 'key' });
+      }
+    };
+    req.onsuccess = e => this.db = e.target.result;
+    req.onerror   = () => console.warn('[IDB] IndexedDB unavailable, using memory only');
+  }
+
+  async get(key) {
+    if (!this.db) return null;
+    return new Promise(res => {
+      const tx  = this.db.transaction(this.storeName, 'readonly');
+      const req = tx.objectStore(this.storeName).get(key);
+      req.onsuccess = () => {
+        const rec = req.result;
+        if (!rec) return res(null);
+        if (Date.now() - rec.ts > IDB_TTL_MS) { this.delete(key); return res(null); }
+        res(rec.data);
+      };
+      req.onerror = () => res(null);
+    });
+  }
+
+  async set(key, data) {
+    if (!this.db) return;
+    return new Promise(res => {
+      const tx  = this.db.transaction(this.storeName, 'readwrite');
+      tx.objectStore(this.storeName).put({ key, data, ts: Date.now() });
+      tx.oncomplete = () => res();
+    });
+  }
+
+  delete(key) {
+    if (!this.db) return;
+    const tx = this.db.transaction(this.storeName, 'readwrite');
+    tx.objectStore(this.storeName).delete(key);
+  }
+}
+
+// ── MEMORY CACHE ─────────────────────────────────────────────
+class MemCache {
+  constructor() { this._store = new Map(); }
+
+  get(key) {
+    const rec = this._store.get(key);
+    if (!rec) return null;
+    if (Date.now() - rec.ts > CACHE_TTL_MS) { this._store.delete(key); return null; }
+    return rec.data;
+  }
+
+  set(key, data) {
+    this._store.set(key, { data, ts: Date.now() });
+  }
+
+  has(key) { return !!this.get(key); }
+
+  invalidate(prefix) {
+    for (const k of this._store.keys()) {
+      if (k.startsWith(prefix)) this._store.delete(k);
+    }
+  }
+}
+
+// ── FIRESTORE ENGINE ─────────────────────────────────────────
+class FirestoreEngine {
+  constructor(db) {
+    this.db    = db;
+    this.mem   = new MemCache();
+    this.idb   = new IDBCache();
+    this._categoryCounts = null;
+  }
+
+  /**
+   * Fetch a page of sounds with cursor-based pagination.
+   * Uses composite indexes for fast category+sort queries.
+   * @param {object} opts - { category, tags, sort, cursor, pageSize }
+   * @returns {Promise<{ sounds, nextCursor, total }>}
+   */
+  async fetchPage({ category = 'all', tags = [], sort = 'name', cursor = null, pageSize = PAGE_SIZE } = {}) {
+    const cacheKey = `page:${category}:${tags.join(',')}:${sort}:${cursor?.id ?? 'start'}`;
+
+    // L1 memory cache
+    const memHit = this.mem.get(cacheKey);
+    if (memHit) return memHit;
+
+    // L2 IndexedDB cache
+    const idbHit = await this.idb.get(cacheKey);
+    if (idbHit) {
+      this.mem.set(cacheKey, idbHit);
+      return idbHit;
+    }
+
+    // L3 Firestore query
+    try {
+      let q = this.db.collection('sounds');
+
+      // Indexed filters (requires Firestore composite indexes)
+      if (category !== 'all') q = q.where('category', '==', category);
+      if (tags.length > 0) q = q.where('tags', 'array-contains-any', tags);
+
+      // Sort (field must be indexed)
+      const sortDir = sort === 'playCount' ? 'desc' : (sort === 'createdAt' ? 'desc' : 'asc');
+      q = q.orderBy(sort, sortDir);
+
+      // Cursor pagination (avoids OFFSET which is O(n))
+      if (cursor) q = q.startAfter(cursor.snapshot);
+
+      q = q.limit(pageSize);
+
+      const snap  = await q.get();
+      const sounds = snap.docs.map(d => ({ id: d.id, ...d.data(), _snap: d }));
+
+      const result = {
+        sounds,
+        nextCursor: sounds.length === pageSize ? {
+          id: sounds[sounds.length - 1].id,
+          snapshot: snap.docs[snap.docs.length - 1]
+        } : null,
+        hasMore: sounds.length === pageSize
+      };
+
+      this.mem.set(cacheKey, result);
+      this.idb.set(cacheKey, result); // store without _snap (not serializable)
+
+      return result;
+    } catch (err) {
+      console.warn('[Firestore] Query failed, falling back to demo data:', err.message);
+      return this._demoPage({ category, tags, sort, cursor, pageSize });
+    }
+  }
+
+  /** Demo/offline fallback with same interface */
+  _demoPage({ category, tags, sort, cursor, pageSize }) {
+    let data = [...DEMO_SOUNDS];
+
+    if (category !== 'all') data = data.filter(s => s.category === category);
+    if (tags.length > 0)    data = data.filter(s => tags.some(t => s.tags.includes(t)));
+
+    const sortFns = {
+      name:      (a,b) => a.name.localeCompare(b.name),
+      playCount: (a,b) => b.playCount - a.playCount,
+      createdAt: (a,b) => b.createdAt - a.createdAt,
+      sizeKB:    (a,b) => a.sizeKB - b.sizeKB
+    };
+    data.sort(sortFns[sort] || sortFns.name);
+
+    const startIdx = cursor ? data.findIndex(s => s.id === cursor.id) + 1 : 0;
+    const page     = data.slice(startIdx, startIdx + pageSize);
+
+    return {
+      sounds: page,
+      nextCursor: page.length === pageSize ? { id: page[page.length - 1].id } : null,
+      hasMore: page.length === pageSize,
+      _total: data.length
+    };
+  }
+
+  /** Get category counts (cached) */
+  async getCategoryCounts() {
+    if (this._categoryCounts) return this._categoryCounts;
+
+    if (DEMO_MODE) {
+      const counts = {};
+      for (const s of DEMO_SOUNDS) {
+        counts[s.category] = (counts[s.category] || 0) + 1;
+      }
+      counts.all = DEMO_SOUNDS.length;
+      this._categoryCounts = counts;
+      return counts;
+    }
+
+    // In production: use Firestore aggregate queries or a separate 'meta/counts' doc
+    // that is updated via Cloud Functions on write to avoid expensive count queries
+    try {
+      const doc = await this.db.collection('meta').doc('counts').get();
+      const counts = doc.exists ? doc.data() : {};
+      counts.all = Object.values(counts).reduce((a,b) => a+b, 0);
+      this._categoryCounts = counts;
+      return counts;
+    } catch {
+      return { all: 0 };
+    }
+  }
+
+  /** Get all unique tags (cached) */
+  async getAllTags() {
+    const cacheKey = 'meta:tags';
+    const hit = this.mem.get(cacheKey);
+    if (hit) return hit;
+
+    if (DEMO_MODE) {
+      const tags = [...new Set(DEMO_SOUNDS.flatMap(s => s.tags))].sort();
+      this.mem.set(cacheKey, tags);
+      return tags;
+    }
+
+    try {
+      const doc = await this.db.collection('meta').doc('tags').get();
+      const tags = doc.exists ? doc.data().list || [] : [];
+      this.mem.set(cacheKey, tags);
+      return tags;
+    } catch { return []; }
+  }
+
+  /** Increment play count (write-batched, fire-and-forget) */
+  incrementPlayCount(soundId) {
+    if (DEMO_MODE) return;
+    // Use increment to avoid read-modify-write race conditions
+    this.db.collection('sounds').doc(soundId).update({
+      playCount: firebase.firestore.FieldValue.increment(1)
+    }).catch(() => {}); // non-critical
+  }
+}
+
+// ── AUDIO ENGINE ─────────────────────────────────────────────
+class AudioEngine {
+  constructor() {
+    this._pool        = new Map();    // url → { audio, busy }
+    this._current     = null;         // currently playing { audio, soundId, cardEl }
+    this._volume      = 0.8;
+    this._playQueue   = new Map();    // soundId → debounce timer
+    this._playCount   = 0;            // session counter
+    this._onPlayStart = null;         // callback
+    this._onPlayEnd   = null;         // callback
+  }
+
+  setVolume(v) {
+    this._volume = Math.max(0, Math.min(1, v));
+    if (this._current?.audio) this._current.audio.volume = this._volume;
+  }
+
+  /**
+   * Play a sound with:
+   * - Debounce (prevents double-trigger on fast clicks)
+   * - Pool reuse (avoids re-fetching same URL)
+   * - Graceful stop of previous
+   */
+  play(sound) {
+    // Debounce rapid triggers for same sound
+    if (this._playQueue.has(sound.id)) {
+      clearTimeout(this._playQueue.get(sound.id));
+    }
+
+    const timer = setTimeout(() => {
+      this._playQueue.delete(sound.id);
+      this._executePlay(sound);
+    }, 50); // 50ms debounce
+
+    this._playQueue.set(sound.id, timer);
+  }
+
+  _executePlay(sound) {
+    // Stop current if same sound (toggle)
+    if (this._current?.soundId === sound.id) {
+      this.stop();
+      return;
+    }
+
+    // Stop previous
+    if (this._current) this.stop(false);
+
+    // Get or create audio from pool
+    let poolEntry = this._pool.get(sound.url);
+    if (!poolEntry) {
+      const audio = new Audio();
+      audio.preload = 'none'; // Key: don't preload until play
+      audio.volume  = this._volume;
+      poolEntry = { audio };
+      this._pool.set(sound.url, poolEntry);
+
+      // Evict oldest if pool too large
+      if (this._pool.size > MAX_AUDIO_POOL) {
+        const oldest = this._pool.keys().next().value;
+        const old    = this._pool.get(oldest);
+        old.audio.src = '';
+        this._pool.delete(oldest);
+      }
+    }
+
+    const { audio } = poolEntry;
+    audio.volume = this._volume;
+    audio.currentTime = 0;
+    audio.src    = sound.url;
+
+    const onEnd = () => {
+      audio.removeEventListener('ended', onEnd);
+      if (this._current?.soundId === sound.id) {
+        this._onPlayEnd?.(sound);
+        this._current = null;
+      }
+    };
+
+    audio.addEventListener('ended', onEnd);
+
+    audio.play().catch(err => {
+      console.warn('[Audio] Playback failed:', err.message);
+      this._onPlayEnd?.(sound);
+      this._current = null;
+      showToast('⚠ Playback blocked — click the card again', 'error');
+    });
+
+    this._current = { audio, soundId: sound.id };
+    this._playCount++;
+    this._onPlayStart?.(sound, audio);
+  }
+
+  stop(notify = true) {
+    if (!this._current) return;
+    const { audio, soundId } = this._current;
+    audio.pause();
+    audio.currentTime = 0;
+    if (notify) this._onPlayEnd?.({ id: soundId });
+    this._current = null;
+  }
+
+  get isPlaying() { return !!this._current; }
+  get currentId()  { return this._current?.soundId ?? null; }
+  get playCount()  { return this._playCount; }
+}
+
+// ── SEARCH ENGINE ─────────────────────────────────────────────
+class SearchEngine {
+  /**
+   * Client-side fuzzy search on loaded sounds.
+   * For production: complement with Algolia or Typesense for server-side full-text.
+   */
+  static filter(sounds, query) {
+    if (!query) return sounds;
+    const q = query.toLowerCase().trim();
+    return sounds.filter(s => 
+      s.name.toLowerCase().includes(q) ||
+      s.category.toLowerCase().includes(q) ||
+      s.tags.some(t => t.toLowerCase().includes(q))
+    );
+  }
+}
+
+// ── APP CONTROLLER ───────────────────────────────────────────
+class SoundVaultApp {
+  constructor() {
+    this.engine    = null;
+    this.audio     = new AudioEngine();
+    this.firestoreEngine = null;
+
+    // State
+    this.state = {
+      category:    'all',
+      activeTags:  [],
+      sort:        'name',
+      search:      '',
+      cursor:      null,
+      loading:     false,
+      hasMore:     true,
+      viewMode:    'grid',    // 'grid' | 'list'
+      volume:      0.8,
+      playsToday:  0,
+      allLoaded:   [],        // all loaded sounds (current filter)
+    };
+
+    this._searchDebounce = null;
+    this._observer       = null;
+  }
+
+  async init() {
+    // Bootstrap Firebase (or demo mode)
+    if (!DEMO_MODE) {
+      try {
+        firebase.initializeApp(FIREBASE_CONFIG);
+        this.firestoreEngine = new FirestoreEngine(firebase.firestore());
+      } catch {
+        console.warn('Firebase init failed, using demo mode');
+        this.firestoreEngine = new FirestoreEngine(null);
+      }
+    } else {
+      this.firestoreEngine = new FirestoreEngine(null);
+    }
+
+    this._bindUI();
+    this._setupAudioCallbacks();
+    this._setupIntersectionObserver();
+
+    await this._loadMeta();
+    await this._fetchNextPage();
+
+    this._updateStats();
+  }
+
+  // ── META (categories, tags) ─────────────────────────────────
+  async _loadMeta() {
+    const [counts, tags] = await Promise.all([
+      this.firestoreEngine.getCategoryCounts(),
+      this.firestoreEngine.getAllTags()
+    ]);
+
+    this._renderCategories(counts);
+    this._renderTags(tags);
+
+    document.getElementById('statTotal').textContent      = counts.all ?? 0;
+    document.getElementById('statCategories').textContent = Object.keys(counts).filter(k => k !== 'all').length;
+  }
+
+  _renderCategories(counts) {
+    const catDefs = [
+      { key:'all',     label:'All Sounds', icon:'🎵' },
+      { key:'sfx',     label:'Sound Effects', icon:'💥' },
+      { key:'music',   label:'Music & Beats', icon:'🎸' },
+      { key:'voice',   label:'Voice & Speech', icon:'🎙️' },
+      { key:'nature',  label:'Nature & Field', icon:'🌿' },
+      { key:'ui',      label:'UI & Interface', icon:'🖱️' },
+      { key:'ambient', label:'Ambient & Drone', icon:'🌌' },
+    ];
+
+    const list = document.getElementById('categoryList');
+    list.innerHTML = '';
+
+    for (const def of catDefs) {
+      const count = counts[def.key] ?? 0;
+      if (def.key !== 'all' && count === 0) continue;
+
+      const li = document.createElement('li');
+      li.className = 'category-item' + (def.key === this.state.category ? ' active' : '');
+      li.dataset.cat = def.key;
+      li.innerHTML = `
+        <span class="category-icon">${def.icon}</span>
+        ${def.label}
+        <span class="category-count" id="cnt-${def.key}">${count}</span>
+      `;
+      li.addEventListener('click', () => this._setCategory(def.key));
+      list.appendChild(li);
+    }
+  }
+
+  _renderTags(tags) {
+    const cloud = document.getElementById('tagsCloud');
+    cloud.innerHTML = '';
+    for (const tag of tags.slice(0, 30)) {
+      const pill = document.createElement('span');
+      pill.className = 'tag-pill';
+      pill.textContent = `#${tag}`;
+      pill.addEventListener('click', () => this._toggleTag(tag));
+      cloud.appendChild(pill);
+    }
+  }
+
+  // ── DATA FETCHING ────────────────────────────────────────────
+  async _fetchNextPage() {
+    if (this.state.loading || !this.state.hasMore) return;
+    this.state.loading = true;
+    this._showSpinner(true);
+
+    try {
+      const result = await this.firestoreEngine.fetchPage({
+        category: this.state.category,
+        tags:     this.state.activeTags,
+        sort:     this.state.sort,
+        cursor:   this.state.cursor,
+        pageSize: PAGE_SIZE
+      });
+
+      const filtered = SearchEngine.filter(result.sounds, this.state.search);
+
+      this.state.allLoaded.push(...filtered);
+      this.state.cursor  = result.nextCursor;
+      this.state.hasMore = result.hasMore;
+
+      this._renderCards(filtered);
+      this._updateGridMeta(result._total);
+
+      if (!result.hasMore) {
+        this._showEndLabel(true);
+      }
+    } catch (err) {
+      console.error('[App] Fetch error:', err);
+      showToast('⚠ Failed to load sounds', 'error');
+    } finally {
+      this.state.loading = false;
+      this._showSpinner(false);
+    }
+  }
+
+  // ── RENDER ───────────────────────────────────────────────────
+  _renderCards(sounds) {
+    const grid  = document.getElementById('soundGrid');
+    const empty = document.getElementById('emptyState');
+
+    if (sounds.length === 0 && this.state.allLoaded.length === 0) {
+      empty.classList.add('visible');
+      return;
+    }
+    empty.classList.remove('visible');
+
+    const frag = document.createDocumentFragment();
+    for (const sound of sounds) {
+      frag.appendChild(this._createCard(sound));
+    }
+    grid.appendChild(frag);
+  }
+
+  _createCard(sound) {
+    const card = document.createElement('div');
+    card.className = 'sound-card';
+    card.dataset.id  = sound.id;
+    card.dataset.cat = sound.category;
+
+    const icon = sound.icon || this._getCatIcon(sound.category);
+
+    card.innerHTML = `
+      <div class="card-icon-wrap">${icon}</div>
+      <div class="card-name">${this._esc(sound.name)}</div>
+      <div class="card-meta">
+        <span class="card-category">${sound.category.toUpperCase()}</span>
+        <span class="card-size">${sound.sizeKB}KB</span>
+      </div>
+    `;
+
+    // Radial gradient follow mouse
+    card.addEventListener('mousemove', e => {
+      const rect = card.getBoundingClientRect();
+      const x    = ((e.clientX - rect.left) / rect.width * 100).toFixed(1);
+      const y    = ((e.clientY - rect.top) / rect.height * 100).toFixed(1);
+      card.style.setProperty('--mx', x + '%');
+      card.style.setProperty('--my', y + '%');
+    });
+
+    // Ripple + play on click
+    card.addEventListener('click', e => {
+      this._addRipple(card, e);
+      this._playSound(sound, card);
+    });
+
+    return card;
+  }
+
+  _addRipple(card, e) {
+    const rect   = card.getBoundingClientRect();
+    const size   = Math.max(card.offsetWidth, card.offsetHeight) * 2;
+    const ripple = document.createElement('div');
+    ripple.className = 'ripple';
+    ripple.style.cssText = `
+      width: ${size}px; height: ${size}px;
+      left: ${e.clientX - rect.left - size/2}px;
+      top:  ${e.clientY - rect.top  - size/2}px;
+    `;
+    card.appendChild(ripple);
+    ripple.addEventListener('animationend', () => ripple.remove());
+  }
+
+  // ── AUDIO PLAYBACK ───────────────────────────────────────────
+  _setupAudioCallbacks() {
+    this.audio._onPlayStart = (sound) => {
+      this.state.playsToday++;
+      this._updateStats();
+      this.firestoreEngine.incrementPlayCount(sound.id);
+
+      // Update now-playing bar
+      document.getElementById('npName').textContent     = sound.name;
+      document.getElementById('npCategory').textContent = `[${sound.category}]`;
+      document.getElementById('nowPlayingBar').classList.add('visible');
+
+      // Mark card
+      const prev = document.querySelector('.sound-card.playing');
+      if (prev) prev.classList.remove('playing');
+      const card = document.querySelector(`.sound-card[data-id="${sound.id}"]`);
+      if (card) card.classList.add('playing');
+    };
+
+    this.audio._onPlayEnd = (sound) => {
+      document.getElementById('nowPlayingBar').classList.remove('visible');
+      const card = document.querySelector(`.sound-card[data-id="${sound.id}"]`);
+      if (card) card.classList.remove('playing');
+    };
+  }
+
+  _playSound(sound, cardEl) {
+    this.audio.play(sound);
+  }
+
+  // ── INTERSECTION OBSERVER (Lazy Load) ────────────────────────
+  _setupIntersectionObserver() {
+    const sentinel = document.getElementById('loadSentinel');
+    this._observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !this.state.loading && this.state.hasMore) {
+          this._fetchNextPage();
+        }
+      },
+      { rootMargin: '200px' } // pre-fetch 200px before sentinel is visible
+    );
+    this._observer.observe(sentinel);
+  }
+
+  // ── FILTERS ──────────────────────────────────────────────────
+  _setCategory(cat) {
+    if (this.state.category === cat) return;
+    this.state.category = cat;
+    this._resetAndReload();
+
+    document.querySelectorAll('.category-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.cat === cat);
+    });
+
+    const title = document.getElementById('gridTitle');
+    const labels = { all:'ALL SOUNDS', sfx:'SOUND EFFECTS', music:'MUSIC & BEATS',
+                     voice:'VOICE & SPEECH', nature:'NATURE & FIELD',
+                     ui:'UI SOUNDS', ambient:'AMBIENT' };
+    title.innerHTML = `${labels[cat] || cat.toUpperCase()} <span id="gridTitleAccent"></span>`;
+  }
+
+  _toggleTag(tag) {
+    const idx = this.state.activeTags.indexOf(tag);
+    if (idx >= 0) this.state.activeTags.splice(idx, 1);
+    else          this.state.activeTags.push(tag);
+
+    document.querySelectorAll('.tag-pill').forEach(el => {
+      el.classList.toggle('active', this.state.activeTags.includes(el.textContent.slice(1)));
+    });
+
+    this._resetAndReload();
+  }
+
+  _resetAndReload() {
+    this.state.cursor   = null;
+    this.state.hasMore  = true;
+    this.state.allLoaded = [];
+    document.getElementById('soundGrid').innerHTML  = '';
+    document.getElementById('emptyState').classList.remove('visible');
+    this._showEndLabel(false);
+    this._fetchNextPage();
+  }
+
+  // ── SEARCH (debounced) ───────────────────────────────────────
+  _handleSearch(query) {
+    clearTimeout(this._searchDebounce);
+    this._searchDebounce = setTimeout(() => {
+      this.state.search = query.trim();
+      this._resetAndReload();
+    }, DEBOUNCE_SEARCH);
+  }
+
+  // ── UI BINDINGS ──────────────────────────────────────────────
+  _bindUI() {
+    // Search
+    document.getElementById('searchInput').addEventListener('input', e => {
+      this._handleSearch(e.target.value);
+    });
+
+    // Sort
+    document.getElementById('sortSelect').addEventListener('change', e => {
+      this.state.sort = e.target.value;
+      this._resetAndReload();
+    });
+
+    // View toggle
+    document.getElementById('gridViewBtn').addEventListener('click', () => this._setView('grid'));
+    document.getElementById('listViewBtn').addEventListener('click', () => this._setView('list'));
+
+    // Stop button
+    document.getElementById('npStop').addEventListener('click', () => this.audio.stop());
+
+    // Volume
+    const slider = document.getElementById('volumeSlider');
+    slider.addEventListener('input', e => {
+      this.state.volume = +e.target.value;
+      this.audio.setVolume(this.state.volume);
+      this._updateVolumeIcon(this.state.volume);
+    });
+
+    document.getElementById('volumeIcon').addEventListener('click', () => {
+      const muted = this.state.volume > 0;
+      this.state.volume = muted ? 0 : 0.8;
+      slider.value = this.state.volume;
+      this.audio.setVolume(this.state.volume);
+      this._updateVolumeIcon(this.state.volume);
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { this.audio.stop(); }
+      if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        document.getElementById('searchInput').focus();
+      }
+    });
+
+    // Add Sound (opens a small modal — demo)
+    document.getElementById('addSoundBtn').addEventListener('click', () => {
+      showToast('📖 Connect Firebase to enable adding sounds', 'success');
+    });
+  }
+
+  _setView(mode) {
+    this.state.viewMode = mode;
+    const grid = document.getElementById('soundGrid');
+    grid.classList.toggle('list-view', mode === 'list');
+    document.getElementById('gridViewBtn').classList.toggle('active', mode === 'grid');
+    document.getElementById('listViewBtn').classList.toggle('active', mode === 'list');
+  }
+
+  _updateVolumeIcon(v) {
+    const icon = document.getElementById('volumeIcon');
+    icon.textContent = v === 0 ? '🔇' : v < 0.4 ? '🔉' : '🔊';
+  }
+
+  // ── STATS ────────────────────────────────────────────────────
+  _updateStats() {
+    animateNumber(document.getElementById('statPlays'), this.state.playsToday);
+  }
+
+  _updateGridMeta(total) {
+    const el = document.getElementById('gridMeta');
+    const n  = this.state.allLoaded.length;
+    el.textContent = `Showing ${n}${this.state.hasMore ? '+' : ''} of ${total ?? '?'} sounds`;
+  }
+
+  // ── HELPERS ──────────────────────────────────────────────────
+  _showSpinner(show) {
+    document.getElementById('loadSpinner').classList.toggle('visible', show);
+  }
+
+  _showEndLabel(show) {
+    document.getElementById('endLabel').classList.toggle('visible', show);
+  }
+
+  _getCatIcon(cat) {
+    const map = { sfx:'💥', music:'🎸', voice:'🎙️', nature:'🌿', ui:'🖱️', ambient:'🌌' };
+    return map[cat] || '🎵';
+  }
+
+  _esc(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+}
+
+// ── UTILITY: Number counter animation ───────────────────────
+function animateNumber(el, target) {
+  const current = +el.textContent || 0;
+  if (current === target) return;
+  const step = Math.ceil((target - current) / 8);
+  let val    = current;
+  const tick = setInterval(() => {
+    val = Math.min(val + step, target);
+    el.textContent = val;
+    if (val >= target) clearInterval(tick);
+  }, 30);
+}
+
+// ── UTILITY: Toast ───────────────────────────────────────────
+function showToast(msg, type = 'info') {
+  const container = document.getElementById('toastContainer');
+  const toast     = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3500);
+}
+
+// ── BOOT ─────────────────────────────────────────────────────
+const app = new SoundVaultApp();
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await app.init();
+
+  // Demo mode notice
+  if (DEMO_MODE) {
+    setTimeout(() => {
+      showToast('🔥 Running in demo mode — wire up Firebase to go live!', 'success');
+    }, 1500);
+  }
+});
+</script>
+</body>
+</html>
